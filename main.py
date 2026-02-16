@@ -9,6 +9,7 @@ from PIL import Image
 import cv2
 import numpy as np
 import time
+from ultralytics import YOLO
 
 # Set Tesseract Path (Adjust if needed)
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -23,7 +24,7 @@ def speak(text):
     engine.stop()
     engine.say(text)
     engine.runAndWait()
-    time.sleep(0.7)  # Prevent mic from instantly activating
+    time.sleep(0.7)
 
 def listen():
     with sr.Microphone() as source:
@@ -40,6 +41,8 @@ def listen():
         except sr.RequestError:
             speak("Speech service unavailable.")
             return ""
+
+# ---------------- OCR FEATURE ----------------
 
 def read_text_under_cursor():
     try:
@@ -61,6 +64,49 @@ def read_text_under_cursor():
     except Exception as e:
         speak("Error reading screen.")
         print("OCR Error:", e)
+
+# ---------------- CAMERA OBJECT DETECTION ----------------
+
+def start_camera_detection():
+    speak("Starting camera object detection")
+
+    model = YOLO("yolov8n.pt")  # Lightweight model
+    cap = cv2.VideoCapture(0)
+
+    spoken_objects = set()
+    last_spoken_time = time.time()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        results = model(frame, verbose=False)
+
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                confidence = float(box.conf[0])
+                cls_id = int(box.cls[0])
+                label = model.names[cls_id]
+
+                # Speak only confident detections and avoid repetition
+                if confidence > 0.6 and label not in spoken_objects:
+                    if time.time() - last_spoken_time > 2:
+                        speak(label)
+                        spoken_objects.add(label)
+                        last_spoken_time = time.time()
+
+        cv2.imshow("Saksham AI - Camera Detection (Press Q to stop)", frame)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    speak("Camera stopped")
+
+# ---------------- COMMAND EXECUTION ----------------
 
 def execute_command(command):
 
@@ -92,6 +138,9 @@ def execute_command(command):
         speak("Reading text under cursor")
         read_text_under_cursor()
 
+    elif "start camera" in command:
+        start_camera_detection()
+
     elif "shutdown" in command:
         speak("Shutting down system in 5 seconds")
         subprocess.Popen("shutdown /s /t 5", shell=True)
@@ -103,12 +152,12 @@ def execute_command(command):
     else:
         speak("Command not recognized.")
 
-# Start assistant
+# ---------------- START ASSISTANT ----------------
+
 speak("Saksham AI started")
 
-# Main loop
 while True:
     command = listen()
     if command:
         execute_command(command)
-        time.sleep(1)  # Prevent rapid re-triggering
+        time.sleep(1)
