@@ -19,6 +19,8 @@ recognizer = sr.Recognizer()
 engine = pyttsx3.init()
 engine.setProperty('rate', 175)
 
+camera_running = False  # Global flag for camera control
+
 def speak(text):
     print("Assistant:", text)
     engine.stop()
@@ -68,15 +70,18 @@ def read_text_under_cursor():
 # ---------------- CAMERA OBJECT DETECTION ----------------
 
 def start_camera_detection():
+    global camera_running
+    camera_running = True
+
     speak("Starting camera object detection")
 
-    model = YOLO("yolov8n.pt")  # Lightweight model
+    model = YOLO("yolov8n.pt")
     cap = cv2.VideoCapture(0)
 
     spoken_objects = set()
     last_spoken_time = time.time()
 
-    while True:
+    while camera_running:
         ret, frame = cap.read()
         if not ret:
             break
@@ -90,25 +95,26 @@ def start_camera_detection():
                 cls_id = int(box.cls[0])
                 label = model.names[cls_id]
 
-                # Speak only confident detections and avoid repetition
                 if confidence > 0.6 and label not in spoken_objects:
                     if time.time() - last_spoken_time > 2:
                         speak(label)
                         spoken_objects.add(label)
                         last_spoken_time = time.time()
 
-        cv2.imshow("Saksham AI - Camera Detection (Press Q to stop)", frame)
+        cv2.imshow("Saksham AI - Camera Detection", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
+    camera_running = False
     speak("Camera stopped")
 
 # ---------------- COMMAND EXECUTION ----------------
 
 def execute_command(command):
+    global camera_running
 
     if "open chrome" in command:
         speak("Opening Chrome")
@@ -139,7 +145,17 @@ def execute_command(command):
         read_text_under_cursor()
 
     elif "start camera" in command:
-        start_camera_detection()
+        if not camera_running:
+            start_camera_detection()
+        else:
+            speak("Camera is already running")
+
+    elif "stop camera" in command:
+        if camera_running:
+            speak("Stopping camera")
+            camera_running = False
+        else:
+            speak("Camera is not running")
 
     elif "shutdown" in command:
         speak("Shutting down system in 5 seconds")
